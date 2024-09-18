@@ -420,6 +420,7 @@ class StableDiffusionProcessing:
         return (
             required_prompts,
             self.distilled_cfg_scale,
+            self.hr_distilled_cfg,
             steps,
             hires_steps,
             use_old_scheduling,
@@ -465,7 +466,7 @@ class StableDiffusionProcessing:
         cache = caches[0]
 
         with devices.autocast():
-            shared.sd_model.set_clip_skip(opts.CLIP_stop_at_last_layers)
+            shared.sd_model.set_clip_skip(int(opts.CLIP_stop_at_last_layers))
 
             cache[1] = function(shared.sd_model, required_prompts, steps, hires_steps, shared.opts.use_old_scheduling)
 
@@ -542,7 +543,7 @@ class Processed:
         self.index_of_first_image = index_of_first_image
         self.styles = p.styles
         self.job_timestamp = state.job_timestamp
-        self.clip_skip = opts.CLIP_stop_at_last_layers
+        self.clip_skip = int(opts.CLIP_stop_at_last_layers)
         self.token_merging_ratio = p.token_merging_ratio
         self.token_merging_ratio_hr = p.token_merging_ratio_hr
 
@@ -714,7 +715,7 @@ def create_infotext(p, all_prompts, all_seeds, all_subseeds, comments=None, iter
     if all_negative_prompts is None:
         all_negative_prompts = p.all_negative_prompts
 
-    clip_skip = getattr(p, 'clip_skip', opts.CLIP_stop_at_last_layers)
+    clip_skip = int(getattr(p, 'clip_skip', opts.CLIP_stop_at_last_layers))
     enable_hr = getattr(p, 'enable_hr', False)
     token_merging_ratio = p.get_token_merging_ratio()
     token_merging_ratio_hr = p.get_token_merging_ratio(for_hr=True)
@@ -1156,6 +1157,8 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
     hr_scheduler: str = None
     hr_prompt: str = ''
     hr_negative_prompt: str = ''
+    hr_cfg: float = 1.0
+    hr_distilled_cfg: float = 3.5
     force_task_id: str = None
 
     cached_hr_uc = [None, None, None]
@@ -1252,6 +1255,10 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
 
             self.extra_generation_params["Hires prompt"] = get_hr_prompt
             self.extra_generation_params["Hires negative prompt"] = get_hr_negative_prompt
+
+            self.extra_generation_params["Hires CFG Scale"] = self.hr_cfg
+            if shared.sd_model.use_distilled_cfg_scale:
+                self.extra_generation_params['Hires Distilled CFG Scale'] = self.hr_distilled_cfg
 
             self.extra_generation_params["Hires schedule type"] = None  # to be set in sd_samplers_kdiffusion.py
 
@@ -1494,8 +1501,8 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
         if self.hr_c is not None:
             return
 
-        hr_prompts = prompt_parser.SdConditioning(self.hr_prompts, width=self.hr_upscale_to_x, height=self.hr_upscale_to_y, distilled_cfg_scale=self.distilled_cfg_scale)
-        hr_negative_prompts = prompt_parser.SdConditioning(self.hr_negative_prompts, width=self.hr_upscale_to_x, height=self.hr_upscale_to_y, is_negative_prompt=True, distilled_cfg_scale=self.distilled_cfg_scale)
+        hr_prompts = prompt_parser.SdConditioning(self.hr_prompts, width=self.hr_upscale_to_x, height=self.hr_upscale_to_y, distilled_cfg_scale=self.hr_distilled_cfg)
+        hr_negative_prompts = prompt_parser.SdConditioning(self.hr_negative_prompts, width=self.hr_upscale_to_x, height=self.hr_upscale_to_y, is_negative_prompt=True, distilled_cfg_scale=self.hr_distilled_cfg)
 
         sampler_config = sd_samplers.find_sampler_config(self.hr_sampler_name or self.sampler_name)
         steps = self.hr_second_pass_steps or self.steps
@@ -1569,6 +1576,8 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
     initial_noise_multiplier: float = None
     latent_mask: Image = None
     force_task_id: str = None
+
+    hr_distilled_cfg: float = 3.5       #   needed here for cached_params
 
     image_mask: Any = field(default=None, init=False)
 
