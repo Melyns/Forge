@@ -74,7 +74,7 @@ class PreprocessorClipVisionForRevision(PreprocessorClipVision):
         self.do_not_need_model = True
         self.ignore_prompt = ignore_prompt
         self.slider_1 = PreprocessorParameter(
-            label="Noise Augmentation", minimum=0.0, maximum=1.0, value=0.0, visible=True)
+            label="Noise Augmentation", minimum=0.0, maximum=1.0, value=0.0, visible=False) # hiding the noise slider since it has no effect 
 
     def process_before_every_sampling(self, process, cond, mask, *args, **kwargs):
         unit = kwargs['unit']
